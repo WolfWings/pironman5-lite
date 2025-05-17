@@ -15,4 +15,4 @@ all: leds
 leds: leds.c
 
 clean:
-        $(RM) leds
+	$(RM) leds
