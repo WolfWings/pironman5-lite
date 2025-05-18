@@ -1,0 +1,6 @@
+[submodule "spleen_font"]
+	path = spleen_font
+	url = https://github.com/fcambus/spleen.git
+[submodule "bdfparser"]
+	path = bdfparser
+	url = https://github.com/tomchen/bdfparser.git
