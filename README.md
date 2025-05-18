@@ -15,3 +15,23 @@ color specifications, as well as 'raw' (000), 'hash' (#000), or 'C constant' (0x
 formats.
 
 It will repeat the specified colors to 'fill' the specified string length as needed.
+
+# monitor
+
+Currently a proof-of-concept that displays a moving bar-graph of CPU usage (based on
+'negative idle' time) and the current CPU temperature in C and F every second.
+
+Future plans for this utility are:
+
+* Full scripting based on a language TBD (either lua or PicoC) exposing any 'sensor'
+  values to be processed once a second, with various graphical widgets plus multiple
+  font sizes (based on Spleen) to render the screen buffer with.
+
+* A full SystemD unit file for easy integration.
+
+* Direct pin control based on the scripting, which will be able to be used to manage
+  GPIO-based fans.
+
+* Direct WS2812 support using any available SPI pins to support addressible RGB fans
+  or any other accessories, such as to indicate temperature or network traffic based
+  on LED colors or similar.
