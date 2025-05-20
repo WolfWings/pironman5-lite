@@ -22,7 +22,7 @@ leds: leds.c
 
 monitor: monitor.c
 
-monitor.c: ssd1306.h font.h masks.h
+monitor.c: ssd1306.h fonts.h masks.h
 
 fonts.h: font_regenerate.py $(FONTS_SRC)
 	./font_regenerate.py

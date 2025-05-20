@@ -13,7 +13,7 @@
 
 #include "ssd1306.h"
 #include "masks.h"
-#include "font.h"
+#include "fonts.h"
 
 // No name used as it's purely for convenience defining mostly sequential values
 enum {
@@ -38,7 +38,7 @@ static struct argp_option options[] = {
 	, .flags = 0, .doc = "Increase output verbosity" },
 
 	{ .name = "oled-device"
-	, .key = ARGP_OPTION_OLED_DEVICE, .arg = "DEVICE PATH"
+	, .key = ARGP_OPTION_OLED_DEVICE, .arg = "DEVICE"
 	, .flags = 0, .doc = "OLED I2C device; defaults to /dev/i2c-1" },
 
 	{ .name = "oled-address"
@@ -46,11 +46,11 @@ static struct argp_option options[] = {
 	, .flags = 0, .doc = "OLED I2C address; defaults to 0x3C" },
 
 	{ .name = "temperature-device"
-	, .key = ARGP_OPTION_TEMPERATURE_DEVICE, .arg = "DEVICE PATH"
+	, .key = ARGP_OPTION_TEMPERATURE_DEVICE, .arg = "DEVICE"
 	, .flags = 0, .doc = "Temperature monitoring device; defaults to /sys/class/thermal/thermal_zone0/temp" },
 
 	{ .name = "aux-fan-gpio"
-	, .key = ARGP_OPTION_AUX_FAN_GPIO, .arg = "PIN NUMBER"
+	, .key = ARGP_OPTION_AUX_FAN_GPIO, .arg = "PIN"
 	, .flags = 0, .doc = "GPIO pin to enable additional cooling fans at the temperature threshold; defaults to 6, set to -1 to disable" },
 
 	{ .name = "aux-fan-threshold-on"
@@ -268,26 +268,31 @@ void oled_init( void ) {
 }
 
 // The lower 3 bits of 'y' are ignored
-void oled_char( unsigned int x, unsigned int y, unsigned int c ) {
-	int src, dst;
+void oled_char( unsigned int x, unsigned int y, unsigned int c, unsigned int size ) {
+	int src;
+	int dst;
+	int width;
 
-	if ( ( y > 64 - 32 )
-	  || ( x > 128 - 16 ) ) {
+	if ( ( size - 1 ) > 3 ) {
+		return;
+	}
+
+	width = font_widths[ size - 1 ];
+
+	if ( ( y > 64 - ( size * 8 ) )
+	  || ( x > 128 - width ) ) {
 		return;
 	}
 
 	dst = ( ( y / 8 ) * 128 ) + x;
 
-	if ( c < 13 ) {
-		src = ( 16 * 32 / 8 ) * c;
+	if ( ( c < 33 ) || ( c > 126 ) ) {
+		c = 32;
+	}
 
-		for ( int i = 0; i < 4; i++ ) {
-			memcpy( gfx + dst + ( i * 128 ), font + src + ( i * 16 ), 16 );
-		}
-	} else {
-		for ( int i = 0; i < 4; i++ ) {
-			memset( gfx + dst + ( i * 128 ), 0, 16 );
-		}
+	src = ( c - 32 ) * width * size;
+	for ( int l = 0; l < size; l++ ) {
+		memcpy( gfx + dst + ( l * 128 ), fonts[ size - 1 ] + src + ( l * width ), width );
 	}
 }
 
@@ -409,6 +414,8 @@ void called_every_second( void ) {
 	unsigned int cpu_used;
 	unsigned int cpu_y;
 
+	char buffer[ 32 ];
+
 	temp_c = update_temperature();
 	// 10,000 final scaling factor for F instead of 1,000 for C
 	temp_f = ( temp_c * 18 ) + 320000;
@@ -489,28 +496,20 @@ void called_every_second( void ) {
 		gfx[ i ] = gfx[ i ] & masks[ i ]; // | masks[ i + 1024 ];
 	}
 
-	temp_f /= 10000;
-	if ( temp_f > 99 ) {
-		oled_char( 24, 0, 1 );
+	p = snprintf( buffer, sizeof( buffer ), "%3u.%04uF", temp_f / 10000, temp_f % 10000 );
+	for ( int i = 0; i < p; i++ ) {
+		oled_char( 24 + ( i * font_widths[ 1 - 1 ] ), 0, buffer[ i ], 1 );
 	}
-	if ( temp_f > 9 ) {
-		oled_char( 24 + 16, 0, ( temp_f / 10 ) % 10 );
+
+	p = snprintf( buffer, sizeof( buffer ), "%2u.%03uC", temp_c / 1000, temp_c % 1000 );
+	for ( int i = 0; i < p; i++ ) {
+		oled_char( 24 + ( i * font_widths[ 2 - 1 ] ), 8, buffer[ i ], 2 );
 	}
-	oled_char( 24 + 32, 0, temp_f % 10 );
-	oled_char( 24 + 48, 0, 11 );
 
-//	if ( cpu_used > 99 ) {
-//		oled_char( 24, 0, 1 );
-//	}
-//	if ( cpu_used > 9 ) {
-//		oled_char( 24 + 16, 0, ( cpu_used / 10 ) % 10 );
-//	}
-//	oled_char( 24 + 32,  0, cpu_used % 10 );
-//	oled_char( 24 + 48,  0, 12 );
-
-	oled_char( 24 + 16, 32, ( temp_c / 1000 ) / 10 );
-	oled_char( 24 + 32, 32, ( temp_c / 1000 ) % 10 );
-	oled_char( 24 + 48, 32, 10 );
+	p = snprintf( buffer, sizeof( buffer ), "%3u%%", cpu_used );
+	for ( int i = 0; i < p; i++ ) {
+		oled_char( 24 + ( i * font_widths[ 2 - 1 ] ), 24, buffer[ i ], 2 );
+	}
 
 	update_oled();
 }
