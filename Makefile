@@ -7,6 +7,7 @@ PACKAGE_VERSION := $(MAJOR_VERSION).$(MINOR_VERSION).$(PATCH_VERSION)
 CC=gcc
 CFLAGS=-Wall -pedantic -march=native -O3 -D__PACKAGE_VERSION__=\"$(PACKAGE_VERSION)\"
 LDFLAGS=-s
+LDLIBS=
 
 FONTS_SRC := spleen_font/spleen-5x8.bdf
 FONTS_SRC += spleen_font/spleen-8x16.bdf
