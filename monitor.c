@@ -1,4 +1,5 @@
 #include <argp.h>
+#include <time.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -88,6 +89,7 @@ struct {
 	.oled.address       = 0x3C,
 	.temperature.device = "/sys/class/thermal/thermal_zone0/temp",
 	.fan.pin            = 6,
+
 	// Temp thresholds are based on raw kernel readings which are C*1000
 	.fan.t_on           = 70000,
 	.fan.t_off          = 60000,
@@ -205,7 +207,6 @@ struct {
 		int oled;
 		int temp;
 		int cpu;
-		int signals;
 	} handles;
 	struct {
 		char *fan_pin;
@@ -216,14 +217,7 @@ struct {
 	.handles.oled     = -1,
 	.handles.temp     = -1,
 	.handles.cpu      = -1,
-	.handles.signals  = -1,
 };
-
-void signalfd_add( int signal ) {
-	sigaddset( &config.signal_mask, SIGALRM );
-	sigprocmask( SIG_SETMASK, &config.signal_mask, NULL );
-	signalfd( config.handles.signals, &config.signal_mask, 0 );
-}
 
 // ============================================================ OLED ROUTINES
 
@@ -232,8 +226,14 @@ void handler_terminate( int ignored ) {
 }
 
 void display_off_atexit( void ) {
+	printf( "AtExit Called\n" );
 	if ( config.handles.oled >= 0 ) {
 		(void)( !write( config.handles.oled, gfx_init, 2 ) );
+	} else {
+		int h = open( arguments.oled.device, O_WRONLY );
+		ioctl( h, I2C_SLAVE, arguments.oled.address );
+		(void)( !write( h, gfx_init, 2 ) );
+		close( h );
 	}
 }
 
@@ -407,7 +407,7 @@ void temperature_init( void ) {
 
 // ========================================================== MAIN EVENT LOOP
 
-void called_every_second( void ) {
+void called_every_second( int ignored ) {
 	unsigned int temp_c, temp_f, temp_y;
 	unsigned int p;
 	unsigned char mask;
@@ -415,6 +415,9 @@ void called_every_second( void ) {
 	unsigned int cpu_y;
 
 	char buffer[ 32 ];
+
+	time_t clock_time;
+	struct tm *clock_tm;
 
 	temp_c = update_temperature();
 	// 10,000 final scaling factor for F instead of 1,000 for C
@@ -508,7 +511,18 @@ void called_every_second( void ) {
 
 	p = snprintf( buffer, sizeof( buffer ), "%3u%%", cpu_used );
 	for ( int i = 0; i < p; i++ ) {
-		oled_char( 24 + ( i * font_widths[ 2 - 1 ] ), 24, buffer[ i ], 2 );
+		oled_char( 24 + ( i * font_widths[ 3 - 1 ] ), 24, buffer[ i ], 3 );
+	}
+
+	clock_time = time( NULL );
+	clock_tm = localtime( &clock_time );
+	p = snprintf( buffer, sizeof( buffer ), "%02i:%02i:", clock_tm->tm_hour, clock_tm->tm_min );
+	for ( int i = 0; i < p; i++ ) {
+		oled_char( 27 + ( i * font_widths[ 2 - 1 ] ), 48, buffer[ i ], 2 );
+	}
+	p = snprintf( buffer, sizeof( buffer ), "%02i", clock_tm->tm_sec );
+	for ( int i = 0; i < p; i++ ) {
+		oled_char( 75 + ( i * font_widths[ 1 - 1 ] ), 56, buffer[ i ], 1 );
 	}
 
 	update_oled();
@@ -516,17 +530,14 @@ void called_every_second( void ) {
 
 // =========================================================== MAIN() STARTUP
 
+void exit_cleanly( int ignored ) {
+	exit( 0 );
+}
+
 int main( int argc, char **argv ) {
-	ssize_t bytes;
-	struct signalfd_siginfo sig;
-
-	argp_parse( &argp, argc, argv, 0, 0, NULL );
-
-	sigemptyset( &config.signal_mask );
-	config.handles.signals = signalfd( -1, &config.signal_mask, 0 );
-	if ( config.handles.signals < 0 ) {
-		perror( "allocating signalfd for handling signals in event loop" );
-	}
+//	ssize_t bytes;
+//
+//	struct signalfd_siginfo sig;
 
 	struct itimerval every_second = {
 		.it_interval.tv_sec = 1,
@@ -535,43 +546,25 @@ int main( int argc, char **argv ) {
 		.it_value.tv_usec = 0,
 	};
 
+	signal( SIGTERM, exit_cleanly );
+	signal( SIGINT, exit_cleanly );
+
+	argp_parse( &argp, argc, argv, 0, 0, NULL );
+
 	oled_init();
 
 	temperature_init();
 
 	cpuidle_init();
 
-	// Mark signals to capture for the event loop
-	signalfd_add( SIGINT );  // Ctrl+C
-	signalfd_add( SIGTERM ); // Default 'kill'
-	signalfd_add( SIGALRM ); // The main one we use
+	signal( SIGALRM, called_every_second );
 
 	// Update once every second
 	setitimer( ITIMER_REAL, &every_second, NULL );
 
 	for (;;) {
-		bytes = read( config.handles.signals, &sig, sizeof( sig ) );
-
-		if ( bytes != sizeof( sig ) ) {
-			perror( "reading signalfd buffer" );
-			exit( EXIT_FAILURE );
-		}
-
-		if ( sig.ssi_signo == SIGALRM ) {
-			called_every_second();
-			continue;
-		}
-
-		if ( sig.ssi_signo == SIGINT ) {
-			break;
-		}
-
-		if ( sig.ssi_signo == SIGTERM ) {
-			break;
-		}
-
-		printf( "Unknown signal received: %s\n", strsignal( sig.ssi_signo ) );
+		pause();
 	}
 
-	return 0;
+	__builtin_unreachable();
 }
