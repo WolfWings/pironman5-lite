@@ -1,15 +1,12 @@
 #include <argp.h>
 #include <time.h>
 #include <fcntl.h>
-#include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <signal.h>
-#include <sys/time.h>
 #include <sys/ioctl.h>
-#include <sys/signalfd.h>
 #include <linux/i2c-dev.h>
 
 #include "ssd1306.h"
@@ -24,10 +21,6 @@ enum {
 	ARGP_OPTION_OLED_DEVICE,
 	ARGP_OPTION_OLED_ADDRESS,
 	ARGP_OPTION_TEMPERATURE_DEVICE,
-	ARGP_OPTION_AUX_FAN_GPIO,
-	ARGP_OPTION_AUX_FAN_THRESHOLD_ON,
-	ARGP_OPTION_AUX_FAN_THRESHOLD_OFF,
-	ARGP_OPTION_PINCTRL,
 };
 
 const char *argp_program_version = "v" __PACKAGE_VERSION__;
@@ -50,22 +43,6 @@ static struct argp_option options[] = {
 	, .key = ARGP_OPTION_TEMPERATURE_DEVICE, .arg = "DEVICE"
 	, .flags = 0, .doc = "Temperature monitoring device; defaults to /sys/class/thermal/thermal_zone0/temp" },
 
-	{ .name = "aux-fan-gpio"
-	, .key = ARGP_OPTION_AUX_FAN_GPIO, .arg = "PIN"
-	, .flags = 0, .doc = "GPIO pin to enable additional cooling fans at the temperature threshold; defaults to 6, set to -1 to disable" },
-
-	{ .name = "aux-fan-threshold-on"
-	, .key = ARGP_OPTION_AUX_FAN_THRESHOLD_ON, .arg = "TEMPERATURE"
-	, .flags = 0, .doc = "Temperature to enable auxiliary cooling fan(s); defaults to 70C, may specify F suffix" },
-
-	{ .name = "aux-fan-threshold-off"
-	, .key = ARGP_OPTION_AUX_FAN_THRESHOLD_OFF, .arg = "TEMPERATURE"
-	, .flags = 0, .doc = "Temperature to disable auxiliary cooling fan(s); defaults to 60C, may specify F suffix" },
-
-	{ .name = "pinctrl"
-	, .key = ARGP_OPTION_PINCTRL, .arg = "FILENAME"
-	, .flags = 0, .doc = "Filename to execute 'pinctrl' equivalent program to modify GPIO pins; defaults to /usr/bin/pinctrl" },
-
 	{ 0 }
 };
 
@@ -77,30 +54,16 @@ struct {
 	struct {
 		char *device;
 	} temperature;
-	struct {
-		int pin;
-		unsigned int t_on;
-		unsigned int t_off;
-	} fan;
-	char *pinctrl;
 	unsigned int verbosity;
 } arguments = {
 	.oled.device        = "/dev/i2c-1",
 	.oled.address       = 0x3C,
 	.temperature.device = "/sys/class/thermal/thermal_zone0/temp",
-	.fan.pin            = 6,
-
-	// Temp thresholds are based on raw kernel readings which are C*1000
-	.fan.t_on           = 70000,
-	.fan.t_off          = 60000,
 	.verbosity          = 0,
-	.pinctrl            = "/usr/bin/pinctrl",
 };
 
 
 static error_t parse_opt( int key, char *arg, struct argp_state *state ) {
-	char *endptr;
-
 	switch( key ) {
 	case ARGP_OPTION_VERBOSE:
 		arguments.verbosity++;
@@ -125,64 +88,12 @@ static error_t parse_opt( int key, char *arg, struct argp_state *state ) {
 
 		break;
 
-	case ARGP_OPTION_AUX_FAN_GPIO:
-		errno = 0;
-		arguments.fan.pin = strtol( arg, NULL, 0 );
-
-		if ( errno != 0 ) {
-			perror( "parsing auxiliary cooling fan GPIO pin number" );
-			argp_usage( state );
-		}
-
-		break;
-
-	case ARGP_OPTION_AUX_FAN_THRESHOLD_ON:
-		errno = 0;
-		arguments.fan.t_on = strtoul( arg, &endptr, 10 ) * 1000;
-
-		if ( errno != 0 ) {
-			perror( "parsing auxiliary cooling fan \"on\" temperature" );
-			argp_usage( state );
-		}
-
-		if ( ( *endptr == 'F' )
-		  || ( *endptr == 'f' ) ) {
-			arguments.fan.t_on = ( ( arguments.fan.t_on - 32000 ) * 10 ) / 18;
-		}
-
-		break;
-
-	case ARGP_OPTION_AUX_FAN_THRESHOLD_OFF:
-		errno = 0;
-		arguments.fan.t_off = strtoul( arg, &endptr, 10 ) * 1000;
-
-		if ( errno != 0 ) {
-			perror( "parsing auxiliary cooling fan \"off\" temperature" );
-			argp_usage( state );
-		}
-
-		if ( ( *endptr == 'F' )
-		  || ( *endptr == 'f' ) ) {
-			arguments.fan.t_off = ( ( arguments.fan.t_off - 32000 ) * 10 ) / 18;
-		}
-
-		break;
-
-	case ARGP_OPTION_PINCTRL:
-		arguments.pinctrl = arg;
-		break;
-
 	case ARGP_KEY_ARG:
 		argp_usage( state );
 		break;
 
 	case ARGP_KEY_END:
 		if ( state->arg_num > 0 ) {
-			argp_usage( state );
-		}
-
-		if ( arguments.fan.t_off >= arguments.fan.t_on ) {
-			printf( "Auxiliary fan \"off\" temperature is not less than the \"on\" temperature.\n" );
 			argp_usage( state );
 		}
 
@@ -208,16 +119,7 @@ struct {
 		int temp;
 		int cpu;
 	} handles;
-	struct {
-		char *fan_pin;
-	} strings;
-	struct {
-		int fan;
-	} status;
-	sigset_t signal_mask;
 } config = {
-	.status.fan       = -1,
-	.strings.fan_pin  = NULL,
 	.handles.oled     = -1,
 	.handles.temp     = -1,
 	.handles.cpu      = -1,
@@ -392,21 +294,11 @@ unsigned int update_temperature( void ) {
 }
 
 void temperature_init( void ) {
-	int bytes;
-
 	config.handles.temp = open( arguments.temperature.device, O_RDONLY );
 	if ( config.handles.temp < 0 ) {
 		perror( "opening device to monitor temperature" );
 		exit( -1 );
 	}
-
-	bytes = snprintf( NULL, 0, "%u", arguments.fan.pin );
-	config.strings.fan_pin = malloc( bytes + 1 );
-	if ( config.strings.fan_pin == NULL ) {
-		perror( "allocating string buffer for fan GPIO pin, disabling aux fan control" );
-		arguments.fan.pin = -1;
-	}
-	sprintf( config.strings.fan_pin, "%u", arguments.fan.pin );
 }
 
 // ========================================================== MAIN EVENT LOOP
@@ -433,28 +325,6 @@ void called_every_second( int ignored ) {
 	}
 	if ( temp_y > 64 ) {
 		temp_y = 64;
-	}
-
-	if ( arguments.fan.pin > -1 ) {
-		if ( temp_c > arguments.fan.t_on ) {
-			if ( config.status.fan != 1 ) {
-				config.status.fan = 1;
-				if ( fork() == 0 ) {
-					char *cmdargv[] = { arguments.pinctrl, "set", config.strings.fan_pin, "op", "dh", NULL };
-					execvp( arguments.pinctrl, cmdargv );
-					exit( 0 );
-				}
-			}
-		} else if ( temp_c < arguments.fan.t_off ) {
-			if ( config.status.fan != 0 ) {
-				config.status.fan = 0;
-				if ( fork() == 0 ) {
-					char *cmdargv[] = { arguments.pinctrl, "set", config.strings.fan_pin, "op", "dl", NULL };
-					execvp( arguments.pinctrl, cmdargv );
-					exit( 0 );
-				}
-			}
-		}
 	}
 
 	update_cpu();
