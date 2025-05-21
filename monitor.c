@@ -545,6 +545,12 @@ void exit_cleanly( int ignored ) {
 }
 
 int main( int argc, char **argv ) {
+	// Disables 'zombie' processes
+	struct sigaction no_zombies = {
+		.sa_handler = SIG_DFL,
+		.sa_flags = SA_NOCLDWAIT,
+	};
+
 	struct itimerval every_second = {
 		.it_interval.tv_sec = 1,
 		.it_interval.tv_usec = 0,
@@ -554,6 +560,8 @@ int main( int argc, char **argv ) {
 
 	signal( SIGTERM, exit_cleanly );
 	signal( SIGINT, exit_cleanly );
+
+	sigaction( SIGCHLD, &no_zombies, NULL );
 
 	argp_parse( &argp, argc, argv, 0, 0, NULL );
 
