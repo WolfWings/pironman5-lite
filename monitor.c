@@ -211,8 +211,12 @@ struct {
 	struct {
 		char *fan_pin;
 	} strings;
+	struct {
+		int fan;
+	} status;
 	sigset_t signal_mask;
 } config = {
+	.status.fan       = -1,
 	.strings.fan_pin  = NULL,
 	.handles.oled     = -1,
 	.handles.temp     = -1,
@@ -433,16 +437,22 @@ void called_every_second( int ignored ) {
 
 	if ( arguments.fan.pin > -1 ) {
 		if ( temp_c > arguments.fan.t_on ) {
-			if ( fork() == 0 ) {
-				char *cmdargv[] = { arguments.pinctrl, "set", config.strings.fan_pin, "op", "dh", NULL };
-				execvp( arguments.pinctrl, cmdargv );
-				exit( 0 );
+			if ( config.status.fan != 1 ) {
+				config.status.fan = 1;
+				if ( fork() == 0 ) {
+					char *cmdargv[] = { arguments.pinctrl, "set", config.strings.fan_pin, "op", "dh", NULL };
+					execvp( arguments.pinctrl, cmdargv );
+					exit( 0 );
+				}
 			}
 		} else if ( temp_c < arguments.fan.t_off ) {
-			if ( fork() == 0 ) {
-				char *cmdargv[] = { arguments.pinctrl, "set", config.strings.fan_pin, "op", "dl", NULL };
-				execvp( arguments.pinctrl, cmdargv );
-				exit( 0 );
+			if ( config.status.fan != 0 ) {
+				config.status.fan = 0;
+				if ( fork() == 0 ) {
+					char *cmdargv[] = { arguments.pinctrl, "set", config.strings.fan_pin, "op", "dl", NULL };
+					execvp( arguments.pinctrl, cmdargv );
+					exit( 0 );
+				}
 			}
 		}
 	}
@@ -535,10 +545,6 @@ void exit_cleanly( int ignored ) {
 }
 
 int main( int argc, char **argv ) {
-//	ssize_t bytes;
-//
-//	struct signalfd_siginfo sig;
-
 	struct itimerval every_second = {
 		.it_interval.tv_sec = 1,
 		.it_interval.tv_usec = 0,
