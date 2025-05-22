@@ -9,109 +9,14 @@
 #include <sys/ioctl.h>
 #include <linux/i2c-dev.h>
 
+#include <luajit-2.1/lauxlib.h>
+#include <luajit-2.1/lualib.h>
+
+#include "fonts.h"
 #include "ssd1306.h"
 #include "masks.h"
-#include "fonts.h"
 
-// No name used as it's purely for convenience defining mostly sequential values
-enum {
-	ARGP_OPTION_VERBOSE = 'v',
-
-	ARGP_OPTION_LONG_ONLY = 0x10FFFF, // Highest possible unicode code point
-	ARGP_OPTION_OLED_DEVICE,
-	ARGP_OPTION_OLED_ADDRESS,
-	ARGP_OPTION_TEMPERATURE_DEVICE,
-};
-
-const char *argp_program_version = "v" __PACKAGE_VERSION__;
-const char *argp_program_bug_address = "https://github.com/wolfwings/pironman5-lite";
-
-static struct argp_option options[] = {
-	{ .name = "verbose"
-	, .key = ARGP_OPTION_VERBOSE, .arg = 0
-	, .flags = 0, .doc = "Increase output verbosity" },
-
-	{ .name = "oled-device"
-	, .key = ARGP_OPTION_OLED_DEVICE, .arg = "DEVICE"
-	, .flags = 0, .doc = "OLED I2C device; defaults to /dev/i2c-1" },
-
-	{ .name = "oled-address"
-	, .key = ARGP_OPTION_OLED_ADDRESS, .arg = "ADDRESS"
-	, .flags = 0, .doc = "OLED I2C address; defaults to 0x3C" },
-
-	{ .name = "temperature-device"
-	, .key = ARGP_OPTION_TEMPERATURE_DEVICE, .arg = "DEVICE"
-	, .flags = 0, .doc = "Temperature monitoring device; defaults to /sys/class/thermal/thermal_zone0/temp" },
-
-	{ 0 }
-};
-
-struct {
-	struct {
-		char *device;
-		uint32_t address;
-	} oled;
-	struct {
-		char *device;
-	} temperature;
-	unsigned int verbosity;
-} arguments = {
-	.oled.device        = "/dev/i2c-1",
-	.oled.address       = 0x3C,
-	.temperature.device = "/sys/class/thermal/thermal_zone0/temp",
-	.verbosity          = 0,
-};
-
-
-static error_t parse_opt( int key, char *arg, struct argp_state *state ) {
-	switch( key ) {
-	case ARGP_OPTION_VERBOSE:
-		arguments.verbosity++;
-		break;
-
-	case ARGP_OPTION_TEMPERATURE_DEVICE:
-		arguments.temperature.device = arg;
-		break;
-
-	case ARGP_OPTION_OLED_DEVICE:
-		arguments.oled.device = arg;
-		break;
-
-	case ARGP_OPTION_OLED_ADDRESS:
-		errno = 0;
-		arguments.oled.address = strtoul( arg, NULL, 0 );
-
-		if ( errno != 0 ) {
-			perror( "parsing OLED I2C address" );
-			argp_usage( state );
-		}
-
-		break;
-
-	case ARGP_KEY_ARG:
-		argp_usage( state );
-		break;
-
-	case ARGP_KEY_END:
-		if ( state->arg_num > 0 ) {
-			argp_usage( state );
-		}
-
-		break;
-
-	default:
-		return ARGP_ERR_UNKNOWN;
-	}
-
-	return 0;
-}
-
-static struct argp argp = {
-	.options = options,
-	.parser = parse_opt,
-	.args_doc = "",
-	.doc = "monitoring utility for display on tiny I2C OLED screens",
-};
+#include "monitor_argp.h"
 
 struct {
 	struct {
@@ -127,20 +32,11 @@ struct {
 
 // ============================================================ OLED ROUTINES
 
-void handler_terminate( int ignored ) {
-	exit( 0 );
-}
-
 void display_off_atexit( void ) {
-	printf( "AtExit Called\n" );
-	if ( config.handles.oled >= 0 ) {
-		(void)( !write( config.handles.oled, gfx_init, 2 ) );
-	} else {
-		int h = open( arguments.oled.device, O_WRONLY );
-		ioctl( h, I2C_SLAVE, arguments.oled.address );
-		(void)( !write( h, gfx_init, 2 ) );
-		close( h );
-	}
+	int h = open( arguments.oled.device, O_WRONLY );
+	ioctl( h, I2C_SLAVE, arguments.oled.address );
+	(void)( !write( h, gfx_init, 2 ) );
+	close( h );
 }
 
 void update_oled( void ) {
@@ -148,9 +44,9 @@ void update_oled( void ) {
 }
 
 void oled_init( void ) {
-	config.handles.oled = open( arguments.oled.device, O_RDWR );
+	config.handles.oled = open( arguments.oled.device, O_WRONLY );
 	if ( config.handles.oled < 0 ) {
-		perror( "opening I2C device for read-write access" );
+		perror( "opening I2C device for write access" );
 		exit( -1 );
 	}
 
@@ -175,8 +71,8 @@ void oled_init( void ) {
 
 // The lower 3 bits of 'y' are ignored
 void oled_char( unsigned int x, unsigned int y, unsigned int c, unsigned int size ) {
-	int src;
-	int dst;
+	const unsigned char *src;
+	unsigned char *dst;
 	int width;
 
 	if ( ( size - 1 ) > 3 ) {
@@ -190,15 +86,23 @@ void oled_char( unsigned int x, unsigned int y, unsigned int c, unsigned int siz
 		return;
 	}
 
-	dst = ( ( y / 8 ) * 128 ) + x;
+	dst = gfx + ( ( y & ~7 ) * ( 128 / 8 ) ) + x;
 
-	if ( ( c < 33 ) || ( c > 126 ) ) {
-		c = 32;
+	// Map character codes to font range
+	c -= 32;
+
+	// Limit character codes to covered glyphs
+	if ( c > ( 126 - 32 ) ) {
+		c = 0;
 	}
 
-	src = ( c - 32 ) * width * size;
-	for ( int l = 0; l < size; l++ ) {
-		memcpy( gfx + dst + ( l * 128 ), fonts[ size - 1 ] + src + ( l * width ), width );
+	src = fonts[ size - 1 ] + ( c * width * size );
+
+	while ( size > 0 ) {
+		memcpy( dst, src, width );
+		dst += 128;
+		src += width;
+		size--;
 	}
 }
 
@@ -301,9 +205,60 @@ void temperature_init( void ) {
 	}
 }
 
+// =================================================================== LUAJIT
+
+lua_State *vm = NULL;
+
+const char *__default_script =
+	"print( 'Hello, World' )\n";
+
+static const luaL_Reg lj_libs[] = {
+	{ "",              luaopen_base },
+	{ LUA_LOADLIBNAME, luaopen_package },
+	{ LUA_TABLIBNAME,  luaopen_table },
+	{ LUA_IOLIBNAME,   luaopen_io },
+	{ LUA_OSLIBNAME,   luaopen_os },
+	{ LUA_STRLIBNAME,  luaopen_string },
+	{ LUA_MATHLIBNAME, luaopen_math },
+	{ LUA_DBLIBNAME,   luaopen_debug },
+	{ LUA_BITLIBNAME,  luaopen_bit },
+	{ LUA_JITLIBNAME,  luaopen_jit },
+	{ 0 }
+};
+
+void vm_init( void ) {
+	const luaL_Reg *lib;
+
+	vm = luaL_newstate();
+
+	if ( vm == NULL ) {
+		perror( "initializing LuaJIT" );
+		exit( EXIT_FAILURE );
+	}
+
+	for (lib = lj_libs; lib->func; lib++) {
+		lua_pushcfunction( vm, lib->func );
+		lua_pushstring( vm, lib->name );
+		lua_call( vm, 1, 0 );
+	}
+
+	if ( arguments.script == NULL ) {
+		arguments.script = __default_script;
+	}
+
+	if ( luaL_loadstring( vm, arguments.script ) != LUA_OK ) {
+		perror( "pre-compiling Lua script" );
+		exit( EXIT_FAILURE );
+	}
+
+	lua_setglobal( vm, "update_frame" );
+}
+
 // ========================================================== MAIN EVENT LOOP
 
 void called_every_second( int ignored ) {
+	struct timeval time_start, time_end;
+
 	unsigned int temp_c, temp_f, temp_y;
 	unsigned int p;
 	unsigned char mask;
@@ -405,6 +360,28 @@ void called_every_second( int ignored ) {
 		oled_char( 75 + ( i * font_widths[ 1 - 1 ] ), 56, buffer[ i ], 1 );
 	}
 
+	lua_getglobal( vm, "update_frame" );
+
+	if ( arguments.verbosity >= 2 ) {
+		gettimeofday( &time_start, NULL );
+	}
+
+	if ( lua_pcall( vm, 0, 0, 0 ) != LUA_OK ) {
+		printf( "error in lua script\n" );
+		exit( EXIT_FAILURE );
+	}
+
+	if ( arguments.verbosity >= 2 ) {
+		gettimeofday( &time_end, NULL );
+		time_end.tv_sec -= time_start.tv_sec;
+		time_end.tv_usec -= time_start.tv_usec;
+		while ( time_end.tv_usec < 0 ) {
+			time_end.tv_usec += 1000000;
+			time_end.tv_sec -= 1;
+		}
+		printf( "%li.%06li seconds taken\n", time_end.tv_sec, time_end.tv_usec );
+	}
+
 	update_oled();
 }
 
@@ -415,12 +392,6 @@ void exit_cleanly( int ignored ) {
 }
 
 int main( int argc, char **argv ) {
-	// Disables 'zombie' processes
-	struct sigaction no_zombies = {
-		.sa_handler = SIG_DFL,
-		.sa_flags = SA_NOCLDWAIT,
-	};
-
 	struct itimerval every_second = {
 		.it_interval.tv_sec = 1,
 		.it_interval.tv_usec = 0,
@@ -431,8 +402,6 @@ int main( int argc, char **argv ) {
 	signal( SIGTERM, exit_cleanly );
 	signal( SIGINT, exit_cleanly );
 
-	sigaction( SIGCHLD, &no_zombies, NULL );
-
 	argp_parse( &argp, argc, argv, 0, 0, NULL );
 
 	oled_init();
@@ -440,6 +409,8 @@ int main( int argc, char **argv ) {
 	temperature_init();
 
 	cpuidle_init();
+
+	vm_init();
 
 	signal( SIGALRM, called_every_second );
 
