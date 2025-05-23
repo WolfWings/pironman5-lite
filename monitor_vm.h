@@ -191,7 +191,6 @@ int vm_lua_oled_copyrect( lua_State *state ) {
 	return 0;
 }
 
-
 int vm_lua_oled_eraserect( lua_State *state ) {
 	int x0 = luaL_checkinteger( state, -4 );
 	int y0 = luaL_checkinteger( state, -3 );

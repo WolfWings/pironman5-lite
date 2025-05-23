@@ -41,6 +41,8 @@ void update_oled( void ) {
 }
 
 void oled_init( void ) {
+	int h;
+
 	config.handles.oled = open( arguments.oled.device, O_WRONLY );
 	if ( config.handles.oled < 0 ) {
 		perror( "opening I2C device for write access" );
@@ -62,6 +64,52 @@ void oled_init( void ) {
 
 	// Update all-black once to avoid 'scroll in' on startup
 	update_oled();
+
+	if ( arguments.oled.mask == NULL ) {
+		return;
+	}
+
+	h = open( arguments.oled.mask, O_RDONLY );
+	if ( h == -1 ) {
+		perror( "opening custom OLED mask file, using default" );
+		return;
+	}
+
+	memset( masks, 0xFF, 1024 );
+	memset( masks + 1024, 0, 1024 );
+
+	for ( int y = 0; y < 64; y++ ) {
+		int p = ( ( y / 8 ) * 128 );
+		int b = 1 << ( y % 8 );
+		for ( int x = 0; ; x++ ) {
+			unsigned char c;
+			ssize_t bytes = read( h, &c, 1 );
+			if ( bytes == 0 ) {
+				close( h );
+				return;
+			}
+
+			if ( bytes == -1 ) {
+				perror( "reading custom OLED mask file" );
+				close( h );
+				return;
+			}
+
+			if ( c == '\n' ) {
+				break;
+			}
+
+			if ( x < 128 ) {
+				if ( c == 'X' ) {
+					masks[ p + x ] &= ~b;
+				} else if ( c == '+' ) {
+					masks[ p + x + 1024 ] |= b;
+				}
+			}
+		}
+	}
+
+	close( h );
 }
 
 // The lower 3 bits of 'y' are ignored

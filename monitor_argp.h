@@ -6,6 +6,7 @@ enum {
 	ARGP_OPTION_LONG_ONLY = 0x10FFFF, // Highest possible unicode code point
 	ARGP_OPTION_OLED_DEVICE,
 	ARGP_OPTION_OLED_ADDRESS,
+	ARGP_OPTION_OLED_MASK,
 	ARGP_OPTION_TEMPERATURE_DEVICE,
 };
 
@@ -29,6 +30,10 @@ static struct argp_option options[] = {
 	, .key = ARGP_OPTION_OLED_ADDRESS, .arg = "ADDRESS"
 	, .flags = 0, .doc = "OLED I2C address; defaults to 0x3C" },
 
+	{ .name = "oled-mask"
+	, .key = ARGP_OPTION_OLED_MASK, .arg = "FILENAME"
+	, .flags = 0, .doc = "Text fle specifying the 'forced mask' bits for OLED rendering; defaults to one suitable for the default rendering script" },
+
 	{ .name = "temperature-device"
 	, .key = ARGP_OPTION_TEMPERATURE_DEVICE, .arg = "DEVICE"
 	, .flags = 0, .doc = "Temperature monitoring device; defaults to /sys/class/thermal/thermal_zone0/temp" },
@@ -40,6 +45,7 @@ struct {
 	struct {
 		char *device;
 		uint32_t address;
+		char *mask;
 	} oled;
 	struct {
 		char *device;
@@ -49,6 +55,7 @@ struct {
 } arguments = {
 	.oled.device        = "/dev/i2c-1",
 	.oled.address       = 0x3C,
+	.oled.mask          = NULL,
 	.temperature.device = "/sys/class/thermal/thermal_zone0/temp",
 	.verbosity          = 0,
 	.script             = NULL,
@@ -133,6 +140,10 @@ static error_t parse_opt( int key, char *arg, struct argp_state *state ) {
 			argp_usage( state );
 		}
 
+		return 0;
+
+	case ARGP_OPTION_OLED_MASK:
+		arguments.oled.mask = arg;
 		return 0;
 
 	case ARGP_KEY_ARG:

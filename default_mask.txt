@@ -1,0 +1,64 @@
+XXXXXXXXXX++++XXXXXXXXXX                                                                XXXXXXXXXXXX++++++++++++++++XXXXXXXXXXXX
+XXXXXXXX++    ++XXXXXXXX <-- Temperature bar in the style of a thermometer              XXXXXXXXXXXX++++++++++++++++XXXXXXXXXXXX
+XXXXXXX+        +XXXXXXX                                                                XXXXXXXXXXXX++++++++++++++++XXXXXXXXXXXX
+XXXXXXX+        +XXXXXXX                                                                XXXXXXXXXXXX++++++++++++++++XXXXXXXXXXXX
+XXXXXX+          +XXXXXX                                                                ++++++++++++++++++++++++++++++++++++++++
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +  CPU usage rendered here in classic  +
+XXXXXX+          +XXXXXX                                                                +  'marching left graph' style.        +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXXX+          +XXXXXX                                                                +                                      +
+XXXXX+            +XXXXX                                                                +                                      +
+XXXX+              +XXXX                                                                +                                      +
+XXX+                +XXX                                                                +                                      +
+XX+                  +XX                                                                +                                      +
+X+                    +X                                                                +                                      +
+X+                    +X                                                                +                                      +
+X+                    +X                                                                +                                      +
++                      +                                                                +                                      +
++                      +                                                                +                                      +
++                      +                                                                +                                      +
++                      +                                                                +                                      +
++                      +                                                                +                                      +
++                      +                                                                +                                      +
+X+                    +X                                                                +                                      +
+X+                    +X                                                                +                                      +
+X+                    +X                                                                +                                      +
+XX+                  +XX                                                                +                                      +
+XXX+                +XXX                                                                +                                      +
+XXXX+              +XXXX                                                                +                                      +
+XXXXX+            +XXXXX                                                                +                                      +
+XXXXXX+++      +++XXXXXX                                                                +                                      +
+XXXXXXXXX++++++XXXXXXXXX                                                                ++++++++++++++++++++++++++++++++++++++++
