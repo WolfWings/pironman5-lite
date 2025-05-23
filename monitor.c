@@ -305,6 +305,35 @@ void called_every_second( int ignored ) {
 	}
 
 	update_oled();
+
+	// Directly generate UTF-8 braille encoding of the OLED display
+	if ( arguments.verbosity >= 3 ) {
+		char bufferh[ ( 64 * 3 ) + 1 ] = { [ 64 * 3 ] = '\0' };
+		char bufferl[ ( 64 * 3 ) + 1 ] = { [ 64 * 3 ] = '\0' };
+		for ( int y = 0; y < 64; y += 8 ) {
+			int p = ( y / 8 ) * 128;
+			for ( int x = 0; x < 128; x += 2 ) {
+				int cx = ( x / 2 ) * 3;
+				unsigned char cu, cl;
+				unsigned char c0, c1;
+				c0 = gfx[ p + x ];
+				c1 = gfx[ p + x + 1];
+				cu = ( ( c0 & 0x07 ) >> 0 ) | ( ( c1 & 0x07 ) << 3 );
+				cl = ( ( c0 & 0x70 ) >> 4 ) | ( ( c1 & 0x70 ) >> 1 );
+				if ( c0 & 0x08 ) cu |= 0x40;
+				if ( c0 & 0x80 ) cl |= 0x40;
+				if ( c1 & 0x08 ) cu |= 0x80;
+				if ( c1 & 0x80 ) cl |= 0x80;
+				bufferh[ cx     ] = 0xE2;
+				bufferh[ cx + 1 ] = 0xA0 | ( cu >> 6 );
+				bufferh[ cx + 2 ] = 0x80 | ( cu & 0x3F );
+				bufferl[ cx     ] = 0xE2;
+				bufferl[ cx + 1 ] = 0xA0 | ( cl >> 6 );
+				bufferl[ cx + 2 ] = 0x80 | ( cl & 0x3F );
+			}
+			printf( "%s\n%s\n", bufferh, bufferl );
+		}
+	}
 }
 
 // =========================================================== MAIN() STARTUP
