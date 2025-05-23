@@ -12,7 +12,7 @@ default is GPIO pin #13 on the Pironman 5 case series where the IR receiver is p
     dtoverlay=gpio-ir,gpio_pin=13
 
 `lirc` is not required when configured in this way, instead you use the `ir-keytable`
-package and identically named utility to handle all configured, and then the IR is
+package and identically named utility to handle all configuration, and then the IR is
 handled entirely by the Linux kernel natively.
 
 # auxiliary/rear rgb fans
