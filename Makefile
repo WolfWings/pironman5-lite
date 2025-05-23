@@ -20,12 +20,12 @@ all: leds monitor
 
 leds: leds.c
 
-monitor: monitor.c
+monitor: monitor.o
 
-monitor.c: ssd1306.h fonts.h masks.h monitor_argp.h
+monitor.o: monitor.c ssd1306.h fonts.h masks.h monitor_argp.h monitor_vm.h
 
 fonts.h: font_regenerate.py $(FONTS_SRC)
 	./font_regenerate.py
 
 clean:
-	$(RM) leds monitor fonts.h
+	$(RM) leds monitor fonts.h *.o
