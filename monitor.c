@@ -62,8 +62,6 @@ void oled_init( void ) {
 
 	// Update all-black once to avoid 'scroll in' on startup
 	update_oled();
-
-	memcpy( gfx, masks + 1024, 1024 );
 }
 
 // The lower 3 bits of 'y' are ignored
@@ -252,6 +250,10 @@ void called_every_second( int ignored ) {
 		}
 		printf( "%li.%06li seconds taken\n", time_end.tv_sec, time_end.tv_usec );
 		printf( "%i elements on VM stack\n", lua_gettop( vm ) );
+	}
+
+	for ( int i = 0; i < 1024; i++ ) {
+		gfx[ i ] = ( gfx[ i ] | masks[ i + 1024 ] ) & masks[ i ];
 	}
 
 	update_oled();
