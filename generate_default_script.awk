@@ -4,6 +4,8 @@ BEGIN {
 }
 
 {
+	gsub( /\\/, "\\\\" )
+	gsub( /"/, "\\\"" )
 	LINE = $0
 	print PREFIX "\t\"" substr( LINE, 0, 64 ) "\""
 	while ( length( LINE ) > 64 ) {

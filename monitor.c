@@ -11,10 +11,9 @@
 #include <linux/i2c-dev.h>
 
 #include "fonts.h"
-#include "ssd1306.h"
 #include "masks.h"
 
-#include "monitor_argp.h"
+#include "monitor_argp.i"
 
 struct {
 	struct {
@@ -32,312 +31,23 @@ struct {
 
 // ============================================================ OLED ROUTINES
 
-void display_off_atexit( void ) {
-	int h = open( arguments.oled.device, O_WRONLY );
-	ioctl( h, I2C_SLAVE, arguments.oled.address );
-	(void)( !write( h, oled_ssd1306_init, 2 ) );
-	close( h );
-}
-
-void update_oled( void ) {
-	(void)( !write( config.handles.oled, oled_buffer_raw + 3, sizeof( oled_buffer_raw ) - 3) );
-}
-
-void oled_init( void ) {
-	int h;
-
-	config.handles.oled = open( arguments.oled.device, O_WRONLY );
-	if ( config.handles.oled < 0 ) {
-		perror( "opening I2C device for write access" );
-		exit( -1 );
-	}
-
-	if ( ioctl( config.handles.oled, I2C_SLAVE, arguments.oled.address ) < 0 ) {
-		perror( "ioctl to assign destination I2C address" );
-		exit( -1 );
-	}
-
-	// So we exit 'cleanly' and don't leave the oled on
-	atexit( display_off_atexit );
-
-	if ( write( config.handles.oled, oled_ssd1306_init, sizeof( oled_ssd1306_init ) ) != sizeof( oled_ssd1306_init ) ) {
-		perror( "initializing oled" );
-		exit( -1 );
-	}
-
-	// Update all-black once to avoid 'scroll in' on startup
-	update_oled();
-
-	if ( arguments.oled.mask == NULL ) {
-		return;
-	}
-
-	h = open( arguments.oled.mask, O_RDONLY );
-	if ( h == -1 ) {
-		perror( "opening custom OLED mask file, using default" );
-		return;
-	}
-
-	memset( oled_mask_and, ~0, sizeof( oled_mask_and ) );
-	memset( oled_mask_or, 0, sizeof( oled_mask_or ) );
-
-	for ( int y = 0; y < 64; y++ ) {
-		int p = ( ( y / 8 ) * 128 );
-		int b = 1 << ( y % 8 );
-		for ( int x = 0; ; x++ ) {
-			unsigned char c;
-			ssize_t bytes = read( h, &c, 1 );
-			if ( bytes == 0 ) {
-				close( h );
-				return;
-			}
-
-			if ( bytes == -1 ) {
-				perror( "reading custom OLED mask file" );
-				close( h );
-				return;
-			}
-
-			if ( c == '\n' ) {
-				break;
-			}
-
-			if ( x < 128 ) {
-				if ( c == 'X' ) {
-					oled_mask_and[ p + x ] &= ~b;
-				} else if ( c == '+' ) {
-					oled_mask_or[ p + x ] |= b;
-				}
-			}
-		}
-	}
-
-	close( h );
-}
-
-// The lower 3 bits of 'y' are ignored
-void oled_char( unsigned int x, unsigned int y, unsigned int c, unsigned int size ) {
-	const unsigned char *src;
-	unsigned char *dst;
-	int width;
-
-	if ( ( size - 1 ) > 3 ) {
-		return;
-	}
-
-	width = font_widths[ size - 1 ];
-
-	if ( ( y > 64 - ( size * 8 ) )
-	  || ( x > 128 - width ) ) {
-		return;
-	}
-
-	dst = oled_buffer + ( ( y & ~7 ) * ( 128 / 8 ) ) + x;
-
-	// Map character codes to font range
-	c -= 32;
-
-	// Limit character codes to covered glyphs
-	if ( c > ( 126 - 32 ) ) {
-		c = 0;
-	}
-
-	src = fonts[ size - 1 ] + ( c * width * size );
-
-	while ( size > 0 ) {
-		memcpy( dst, src, width );
-		dst += 128;
-		src += width;
-		size--;
-	}
-}
+#include "monitor_oled.i"
 
 // ============================================================= SCRIPTING VM
 
-#include "monitor_vm.h"
+#include "monitor_vm.i"
 
 // ================================================================ CPU USAGE
 
-// CPU usage (negative idle) is averaged over this many seconds
-//
-// We still update every second, but this allows for a smoother
-// graph displayed on the tiny screen that's more readable.
-#define CPU_WINDOW 5
-
-uint64_t stat_idle[ CPU_WINDOW + 1 ];
-
-void sensor_update_cpu_usage( void ) {
-	char buffer[ 64 ];
-	unsigned int index;
-	unsigned int spaces;
-	uint64_t idle;
-
-	// We don't need to check if the handle is valid as we'll leave on error reading
-	lseek( config.handles.cpu, 0, SEEK_SET );
-
-	// Minimal possible string is "cpu  0 0 0 0 " so abort on shorts + errors
-	if ( read( config.handles.cpu, buffer, sizeof( buffer ) ) < 13 ) {
-		return;
-	}
-
-	// Skip over the first five spaces ignoring all other characters
-	index = 0;
-	spaces = 0;
-	do {
-		if ( buffer[ index ] == ' ' ) {
-			spaces++;
-			if ( spaces >= 5 ) {
-				break;
-			}
-		}
-		index++;
-	} while ( index < 64 );
-
-	// Build the CPU usage value
-	idle = 0;
-
-	while ( index < 64 ) {
-		index++;
-		if ( buffer[ index ] == ' ' ) {
-			break;
-		}
-		idle *= 10;
-		idle += buffer[ index ] - '0';
-	};
-
-	// Now we can shift the usage window over and add the new value
-	for ( int i = CPU_WINDOW; i > 0; i-- ) {
-		stat_idle[ i ] = stat_idle[ i - 1 ];
-	}
-	stat_idle[ 0 ] = idle;
-}
-
-void sensor_init_cpu_usage( void ) {
-	config.handles.cpu = open( "/proc/stat", O_RDONLY );
-	if ( config.handles.temp < 0 ) {
-		perror( "Opening /proc/stat to monitor CPU usage" );
-		exit( -1 );
-	}
-
-	stat_idle[ 0 ] = 0;
-	sensor_update_cpu_usage();
-	for ( int i = 1; i <= CPU_WINDOW; i++ ) {
-		stat_idle[ i ] = stat_idle[ i - 1 ] - 400;
-	}
-}
+#include "monitor_cpu_usage.i"
 
 // ============================================================== TEMPERATURE
 
-unsigned int sensor_update_temperature( void ) {
-	char buffer[ 64 ];
-	ssize_t bytes;
-	unsigned int tally;
-
-	lseek( config.handles.temp, 0, SEEK_SET );
-	bytes = read( config.handles.temp, buffer, sizeof( buffer ) );
-	if ( bytes < 0 ) {
-		return -1;
-	}
-
-	tally = 0;
-	for ( int i = 0; i < bytes - 1; i++ ) {
-		tally = ( tally * 10 ) + ( buffer[ i ] - '0' );
-	}
-
-	return tally;
-}
-
-void sensor_init_temperature( void ) {
-	config.handles.temp = open( arguments.temperature.device, O_RDONLY );
-	if ( config.handles.temp < 0 ) {
-		perror( "opening device to monitor temperature" );
-		exit( -1 );
-	}
-}
+#include "monitor_temperature.i"
 
 // =============================================================== DISK USAGE
 
-// grep -E '^/dev' /proc/mounts | cut -d ' ' -f 2
-//
-// This provides a mostly clean list of all mounts for physical block devices
-// that we can iterate over and build a Lua table of disk usage.
-void sensor_update_disk_usage( void ) {
-	struct statvfs vfs;
-	char mounts[ 16384 ];
-	ssize_t bytes;
-	int p;
-
-	lseek( config.handles.disk, 0, SEEK_SET );
-
-	// This simplifies searching to prepend a newline before the first line
-	mounts[ 0 ] = '\n';
-	bytes = read( config.handles.disk, mounts + 1, sizeof( mounts ) - 1 );
-
-	if ( bytes < 0 ) {
-		perror( "reading /proc/mounts" );
-		return;
-	}
-
-	if ( bytes > 16383 ) {
-		bytes = 16383;
-	}
-	mounts[ bytes ] = '\0';
-
-	p = 0;
-	for (;;) {
-		char *found;
-		found = memchr( mounts + p, '\n', sizeof( mounts ) - p );
-		if ( found == NULL ) {
-			break;
-		}
-		p = found - mounts + 1;
-		if ( ( found[ 1 ] != '/' )
-		  || ( found[ 2 ] != 'd' )
-		  || ( found[ 3 ] != 'e' )
-		  || ( found[ 4 ] != 'v' )
-		  || ( found[ 5 ] != '/' ) ) {
-			continue;
-		}
-		found = memchr( mounts + p, ' ', sizeof( mounts ) - p );
-		if ( found == NULL ) {
-			break;
-		}
-		p = found - mounts + 1;
-		found = memchr( mounts + p, ' ', sizeof( mounts ) - p );
-		if ( found == NULL ) {
-			break;
-		}
-		*found = '\0';
-		if ( statvfs( mounts + p, &vfs ) != 0 ) {
-			continue;
-		}
-
-		lua_newtable( vm );
-		lua_pushnumber( vm, (lua_Number)vfs.f_frsize );
-		lua_setfield( vm, -2, "blocksize" );
-		lua_pushnumber( vm, (lua_Number)vfs.f_blocks );
-		lua_setfield( vm, -2, "total" );
-		lua_pushnumber( vm, (lua_Number)vfs.f_bfree );
-		lua_setfield( vm, -2, "free" );
-		lua_pushnumber( vm, (lua_Number)vfs.f_bavail );
-		lua_setfield( vm, -2, "avail" );
-		lua_setfield( vm, -2, mounts + p );
-
-		if ( arguments.verbosity >= 3 ) {
-			printf( "\tMount point %s: %lu/%lu\n", mounts + p, vfs.f_blocks - vfs.f_bfree, vfs.f_blocks );
-		}
-
-		p = found - mounts + 1;
-	}
-}
-
-void sensor_init_disk_usage( void ) {
-	config.handles.disk = open( "/proc/mounts", O_RDONLY );
-	if ( config.handles.disk < 0 ) {
-		perror( "opening /proc/mounts" );
-		exit( -1 );
-	}
-}
+#include "monitor_disk_usage.i"
 
 // ========================================================== MAIN EVENT LOOP
 

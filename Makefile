@@ -18,11 +18,11 @@ FONTS_SRC += spleen_font/spleen-16x32.bdf
 
 all: leds monitor
 
-leds: leds.c
+leds: leds.o
 
 monitor: monitor.o
 
-monitor.o: monitor.c ssd1306.h fonts.h masks.h monitor_argp.h monitor_vm.h default_script.h
+monitor.o: monitor.c $(wildcard monitor_*.i) fonts.h masks.h default_script.h
 
 fonts.h: generate_fonts.py $(FONTS_SRC)
 	./generate_fonts.py
