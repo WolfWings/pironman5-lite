@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <sys/ioctl.h>
+#include <sys/statvfs.h>
 #include <linux/i2c-dev.h>
 
 #include "fonts.h"
@@ -20,11 +21,13 @@ struct {
 		int oled;
 		int temp;
 		int cpu;
+		int disk;
 	} handles;
 } config = {
-	.handles.oled     = -1,
-	.handles.temp     = -1,
-	.handles.cpu      = -1,
+	.handles.oled = -1,
+	.handles.temp = -1,
+	.handles.cpu  = -1,
+	.handles.disk = -1,
 };
 
 // ============================================================ OLED ROUTINES
@@ -149,6 +152,10 @@ void oled_char( unsigned int x, unsigned int y, unsigned int c, unsigned int siz
 	}
 }
 
+// ============================================================= SCRIPTING VM
+
+#include "monitor_vm.h"
+
 // ================================================================ CPU USAGE
 
 // CPU usage (negative idle) is averaged over this many seconds
@@ -159,7 +166,7 @@ void oled_char( unsigned int x, unsigned int y, unsigned int c, unsigned int siz
 
 uint64_t stat_idle[ CPU_WINDOW + 1 ];
 
-void update_cpu( void ) {
+void sensor_update_cpu_usage( void ) {
 	char buffer[ 64 ];
 	unsigned int index;
 	unsigned int spaces;
@@ -205,7 +212,7 @@ void update_cpu( void ) {
 	stat_idle[ 0 ] = idle;
 }
 
-void cpuidle_init( void ) {
+void sensor_init_cpu_usage( void ) {
 	config.handles.cpu = open( "/proc/stat", O_RDONLY );
 	if ( config.handles.temp < 0 ) {
 		perror( "Opening /proc/stat to monitor CPU usage" );
@@ -213,7 +220,7 @@ void cpuidle_init( void ) {
 	}
 
 	stat_idle[ 0 ] = 0;
-	update_cpu();
+	sensor_update_cpu_usage();
 	for ( int i = 1; i <= CPU_WINDOW; i++ ) {
 		stat_idle[ i ] = stat_idle[ i - 1 ] - 400;
 	}
@@ -221,7 +228,7 @@ void cpuidle_init( void ) {
 
 // ============================================================== TEMPERATURE
 
-unsigned int update_temperature( void ) {
+unsigned int sensor_update_temperature( void ) {
 	char buffer[ 64 ];
 	ssize_t bytes;
 	unsigned int tally;
@@ -240,7 +247,7 @@ unsigned int update_temperature( void ) {
 	return tally;
 }
 
-void temperature_init( void ) {
+void sensor_init_temperature( void ) {
 	config.handles.temp = open( arguments.temperature.device, O_RDONLY );
 	if ( config.handles.temp < 0 ) {
 		perror( "opening device to monitor temperature" );
@@ -248,9 +255,89 @@ void temperature_init( void ) {
 	}
 }
 
-// ============================================================= SCRIPTING VM
+// =============================================================== DISK USAGE
 
-#include "monitor_vm.h"
+// grep -E '^/dev' /proc/mounts | cut -d ' ' -f 2
+//
+// This provides a mostly clean list of all mounts for physical block devices
+// that we can iterate over and build a Lua table of disk usage.
+void sensor_update_disk_usage( void ) {
+	struct statvfs vfs;
+	char mounts[ 16384 ];
+	ssize_t bytes;
+	int p;
+
+	lseek( config.handles.disk, 0, SEEK_SET );
+
+	// This simplifies searching to prepend a newline before the first line
+	mounts[ 0 ] = '\n';
+	bytes = read( config.handles.disk, mounts + 1, sizeof( mounts ) - 1 );
+
+	if ( bytes < 0 ) {
+		perror( "reading /proc/mounts" );
+		return;
+	}
+
+	if ( bytes > 16383 ) {
+		bytes = 16383;
+	}
+	mounts[ bytes ] = '\0';
+
+	p = 0;
+	for (;;) {
+		char *found;
+		found = memchr( mounts + p, '\n', sizeof( mounts ) - p );
+		if ( found == NULL ) {
+			break;
+		}
+		p = found - mounts + 1;
+		if ( ( found[ 1 ] != '/' )
+		  || ( found[ 2 ] != 'd' )
+		  || ( found[ 3 ] != 'e' )
+		  || ( found[ 4 ] != 'v' )
+		  || ( found[ 5 ] != '/' ) ) {
+			continue;
+		}
+		found = memchr( mounts + p, ' ', sizeof( mounts ) - p );
+		if ( found == NULL ) {
+			break;
+		}
+		p = found - mounts + 1;
+		found = memchr( mounts + p, ' ', sizeof( mounts ) - p );
+		if ( found == NULL ) {
+			break;
+		}
+		*found = '\0';
+		if ( statvfs( mounts + p, &vfs ) != 0 ) {
+			continue;
+		}
+
+		lua_newtable( vm );
+		lua_pushnumber( vm, (lua_Number)vfs.f_frsize );
+		lua_setfield( vm, -2, "blocksize" );
+		lua_pushnumber( vm, (lua_Number)vfs.f_blocks );
+		lua_setfield( vm, -2, "total" );
+		lua_pushnumber( vm, (lua_Number)vfs.f_bfree );
+		lua_setfield( vm, -2, "free" );
+		lua_pushnumber( vm, (lua_Number)vfs.f_bavail );
+		lua_setfield( vm, -2, "avail" );
+		lua_setfield( vm, -2, mounts + p );
+
+		if ( arguments.verbosity >= 3 ) {
+			printf( "\tMount point %s: %lu/%lu\n", mounts + p, vfs.f_blocks - vfs.f_bfree, vfs.f_blocks );
+		}
+
+		p = found - mounts + 1;
+	}
+}
+
+void sensor_init_disk_usage( void ) {
+	config.handles.disk = open( "/proc/mounts", O_RDONLY );
+	if ( config.handles.disk < 0 ) {
+		perror( "opening /proc/mounts" );
+		exit( -1 );
+	}
+}
 
 // ========================================================== MAIN EVENT LOOP
 
@@ -261,10 +348,10 @@ void called_every_second( int ignored ) {
 
 	lua_getglobal( vm, "sensors" );
 
-	lua_pushnumber( vm, ( ( lua_Number ) update_temperature() ) / 1000.0 );
+	lua_pushnumber( vm, ( ( lua_Number ) sensor_update_temperature() ) / 1000.0 );
 	lua_setfield( vm, -2, "temperature" );
 
-	update_cpu();
+	sensor_update_cpu_usage();
 
 	cpu_used = ( CPU_WINDOW * 400 ) - ( stat_idle[ 0 ] - stat_idle[ CPU_WINDOW ] );
 
@@ -273,6 +360,10 @@ void called_every_second( int ignored ) {
 
 	lua_pushinteger( vm, time( NULL ) );
 	lua_setfield( vm, -2, "time" );
+
+	lua_newtable( vm );
+	sensor_update_disk_usage();
+	lua_setfield( vm, -2, "disk" );
 
 	lua_setglobal( vm, "sensors" );
 
@@ -357,9 +448,11 @@ int main( int argc, char **argv ) {
 
 	oled_init();
 
-	temperature_init();
+	sensor_init_temperature();
 
-	cpuidle_init();
+	sensor_init_cpu_usage();
+
+	sensor_init_disk_usage();
 
 	vm_init();
 
