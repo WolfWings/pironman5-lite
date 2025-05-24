@@ -1,6 +1,6 @@
 MAJOR_VERSION := 0
-MINOR_VERSION := 0
-PATCH_VERSION := 1
+MINOR_VERSION := 1
+PATCH_VERSION := 0
 
 PACKAGE_VERSION := $(MAJOR_VERSION).$(MINOR_VERSION).$(PATCH_VERSION)
 
@@ -24,8 +24,11 @@ monitor: monitor.o
 
 monitor.o: monitor.c ssd1306.h fonts.h masks.h monitor_argp.h monitor_vm.h
 
-fonts.h: font_regenerate.py $(FONTS_SRC)
-	./font_regenerate.py
+fonts.h: generate_fonts.py $(FONTS_SRC)
+	./generate_fonts.py
+
+masks.h: generate_masks.py default_mask.txt
+	./generate_masks.py default_mask.txt
 
 clean:
-	$(RM) leds monitor fonts.h *.o
+	$(RM) leds monitor fonts.h masks.h *.o

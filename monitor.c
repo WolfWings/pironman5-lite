@@ -32,12 +32,12 @@ struct {
 void display_off_atexit( void ) {
 	int h = open( arguments.oled.device, O_WRONLY );
 	ioctl( h, I2C_SLAVE, arguments.oled.address );
-	(void)( !write( h, gfx_init, 2 ) );
+	(void)( !write( h, oled_ssd1306_init, 2 ) );
 	close( h );
 }
 
 void update_oled( void ) {
-	(void)( !write( config.handles.oled, raw_gfx + 3, sizeof( raw_gfx ) - 3) );
+	(void)( !write( config.handles.oled, oled_buffer_raw + 3, sizeof( oled_buffer_raw ) - 3) );
 }
 
 void oled_init( void ) {
@@ -57,7 +57,7 @@ void oled_init( void ) {
 	// So we exit 'cleanly' and don't leave the oled on
 	atexit( display_off_atexit );
 
-	if ( write( config.handles.oled, gfx_init, sizeof( gfx_init ) ) != sizeof( gfx_init ) ) {
+	if ( write( config.handles.oled, oled_ssd1306_init, sizeof( oled_ssd1306_init ) ) != sizeof( oled_ssd1306_init ) ) {
 		perror( "initializing oled" );
 		exit( -1 );
 	}
@@ -75,8 +75,8 @@ void oled_init( void ) {
 		return;
 	}
 
-	memset( masks, 0xFF, 1024 );
-	memset( masks + 1024, 0, 1024 );
+	memset( oled_mask_and, ~0, sizeof( oled_mask_and ) );
+	memset( oled_mask_or, 0, sizeof( oled_mask_or ) );
 
 	for ( int y = 0; y < 64; y++ ) {
 		int p = ( ( y / 8 ) * 128 );
@@ -101,9 +101,9 @@ void oled_init( void ) {
 
 			if ( x < 128 ) {
 				if ( c == 'X' ) {
-					masks[ p + x ] &= ~b;
+					oled_mask_and[ p + x ] &= ~b;
 				} else if ( c == '+' ) {
-					masks[ p + x + 1024 ] |= b;
+					oled_mask_or[ p + x ] |= b;
 				}
 			}
 		}
@@ -129,7 +129,7 @@ void oled_char( unsigned int x, unsigned int y, unsigned int c, unsigned int siz
 		return;
 	}
 
-	dst = gfx + ( ( y & ~7 ) * ( 128 / 8 ) ) + x;
+	dst = oled_buffer + ( ( y & ~7 ) * ( 128 / 8 ) ) + x;
 
 	// Map character codes to font range
 	c -= 32;
@@ -301,7 +301,7 @@ void called_every_second( int ignored ) {
 	}
 
 	for ( int i = 0; i < 1024; i++ ) {
-		gfx[ i ] = ( gfx[ i ] | masks[ i + 1024 ] ) & masks[ i ];
+		oled_buffer[ i ] = ( oled_buffer[ i ] | oled_mask_or[ i ] ) & oled_mask_and[ i ];
 	}
 
 	update_oled();
@@ -316,8 +316,8 @@ void called_every_second( int ignored ) {
 				int cx = ( x / 2 ) * 3;
 				unsigned char cu, cl;
 				unsigned char c0, c1;
-				c0 = gfx[ p + x ];
-				c1 = gfx[ p + x + 1];
+				c0 = oled_buffer[ p + x ];
+				c1 = oled_buffer[ p + x + 1];
 				cu = ( ( c0 & 0x07 ) >> 0 ) | ( ( c1 & 0x07 ) << 3 );
 				cl = ( ( c0 & 0x70 ) >> 4 ) | ( ( c1 & 0x70 ) >> 1 );
 				if ( c0 & 0x08 ) cu |= 0x40;

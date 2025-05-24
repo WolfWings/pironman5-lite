@@ -96,7 +96,7 @@ int vm_lua_oled_fillrect( lua_State *state ) {
 	}
 	if ( mask ) {
 		for ( int x = x0; x <= x1; x++ ) {
-			gfx[ p + x ] |= mask;
+			oled_buffer[ p + x ] |= mask;
 		}
 	}
 
@@ -108,13 +108,13 @@ int vm_lua_oled_fillrect( lua_State *state ) {
 	}
 	if ( mask ) {
 		for ( int x = x0; x <= x1; x++ ) {
-			gfx[ p + x ] |= mask;
+			oled_buffer[ p + x ] |= mask;
 		}
 	}
 
 	p = ( y0 / 8 ) * 128;
 	while ( y0 < y1 ) {
-		memset( gfx + p + x0, 0xFF, ( x1 - x0 ) + 1 );
+		memset( oled_buffer + p + x0, 0xFF, ( x1 - x0 ) + 1 );
 		p += 128;
 		y0 += 8;
 	}
@@ -182,7 +182,7 @@ int vm_lua_oled_copyrect( lua_State *state ) {
 	s = ( ( y0 / 8 ) * 128 ) + x0;
 	d = ( ( ( y0 + yo ) / 8 ) * 128 ) + x0 + xo;
 	while ( y0 <= y1 ) {
-		memmove( gfx + d, gfx + s, x1 );
+		memmove( oled_buffer + d, oled_buffer + s, x1 );
 		s += 128;
 		d += 128;
 		y0 += 8;
@@ -253,7 +253,7 @@ int vm_lua_oled_eraserect( lua_State *state ) {
 	if ( mask ) {
 		mask = ~mask;
 		for ( int x = x0; x <= x1; x++ ) {
-			gfx[ p + x ] &= mask;
+			oled_buffer[ p + x ] &= mask;
 		}
 	}
 
@@ -266,13 +266,13 @@ int vm_lua_oled_eraserect( lua_State *state ) {
 	if ( mask ) {
 		mask = ~mask;
 		for ( int x = x0; x <= x1; x++ ) {
-			gfx[ p + x ] &= mask;
+			oled_buffer[ p + x ] &= mask;
 		}
 	}
 
 	p = ( y0 / 8 ) * 128;
 	while ( y0 < y1 ) {
-		memset( gfx + p + x0, 0, ( x1 - x0 ) + 1 );
+		memset( oled_buffer + p + x0, 0, ( x1 - x0 ) + 1 );
 		p += 128;
 		y0 += 8;
 	}

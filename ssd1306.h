@@ -8,7 +8,7 @@
 //
 // It's possible to send smaller 'damage rectangles' as there is RAM
 // buffering the entire display on the controller.
-static unsigned char gfx_init[] = {
+static unsigned char oled_ssd1306_init[] = {
 	0x80, 0xae,             // Power off display
 	0x80, 0x20, 0x80, 0x00, // Set memory format: Vertical
 	0x80, 0xa8, 0x80, 0x3f, // MUX aka "height" of 64 lines
@@ -29,7 +29,7 @@ static unsigned char gfx_init[] = {
 };
 
 // Raw 'framebuffer' including bytes needed to update
-static unsigned char raw_gfx[ 16 + ( ( 128 * 64 ) / 8 ) ] = {
+static unsigned char oled_buffer_raw[ 16 + ( ( 128 * 64 ) / 8 ) ] = {
 	0, 0, 0, // Padding to align bit-buffer to 16 bytes
 	0x80, 0x21, 0x80, 0x00, 0x80, 0x7f, // Horizontal pixels
 	0x80, 0x22, 0x80, 0x00, 0x80, 0x07, // Vertical stripes
@@ -37,4 +37,4 @@ static unsigned char raw_gfx[ 16 + ( ( 128 * 64 ) / 8 ) ] = {
 	0
 };
 
-#define gfx ( raw_gfx + 13 + 3 )
+#define oled_buffer ( oled_buffer_raw + 13 + 3 )
