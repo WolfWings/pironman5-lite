@@ -37,4 +37,16 @@ static unsigned char oled_buffer_raw[ 16 + ( ( 128 * 64 ) / 8 ) ] = {
 	0
 };
 
+// Convenience define pointing at the ACTUAL framebuffer data
+//
+// The framebuffer is 1-bit-per-pixel, in horizontal bands of 8 vertical pixels per byte:
+//
+//   Byte0Bit0   Byte1Bit0   Byte2Bit0 ...  Byte125Bit0  Byte126Bit0  Byte127Bit0
+//   Byte0Bit1   Byte1Bit1   Byte2Bit1 ...  Byte125Bit1  Byte126Bit1  Byte127Bit1
+//   Byte0Bit2   Byte1Bit2   Byte2Bit2 ...  Byte125Bit2  Byte126Bit2  Byte127Bit2
+//                                     ...
+// Byte896Bit5 Byte897Bit5 Byte898Bit5 ... Byte1021Bit5 Byte1022Bit5 Byte1023Bit5
+// Byte896Bit6 Byte897Bit6 Byte898Bit6 ... Byte1021Bit6 Byte1022Bit6 Byte1023Bit6
+// Byte896Bit7 Byte897Bit7 Byte898Bit7 ... Byte1021Bit7 Byte1022Bit7 Byte1023Bit7
+
 #define oled_buffer ( oled_buffer_raw + 13 + 3 )

@@ -1,4 +1,4 @@
-// No name used as it's purely for convenience defining mostly sequential values
+// Unnamed enum as we're only using it to auto-generate values, not for typecasting
 enum {
 	ARGP_OPTION_VERBOSE = 'v',
 	ARGP_OPTION_LUA_SCRIPT = 'l',
@@ -32,7 +32,7 @@ static struct argp_option options[] = {
 
 	{ .name = "oled-mask"
 	, .key = ARGP_OPTION_OLED_MASK, .arg = "FILENAME"
-	, .flags = 0, .doc = "Text fle specifying the 'forced mask' bits for OLED rendering; defaults to one suitable for the default rendering script" },
+	, .flags = 0, .doc = "Text file specifying the 'forced mask' bits for OLED rendering; defaults to one suitable for the default rendering script" },
 
 	{ .name = "temperature-device"
 	, .key = ARGP_OPTION_TEMPERATURE_DEVICE, .arg = "DEVICE"

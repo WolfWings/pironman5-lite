@@ -3,5 +3,6 @@
 
 # 'Generated' files
 fonts.h
+masks.h
 leds
 monitor

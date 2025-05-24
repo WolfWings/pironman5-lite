@@ -14,6 +14,9 @@ static const char *__default_script =
 "\n"	"oled.fillrect(   1, 84 - sensors.temperature, 23, 63 )"
 ;
 
+// oled.print( X, Y, TEXT, SIZE )
+//
+// Render TEXT starting at X,Y as the upper left corner at SIZE*8 pixels tall
 int vm_lua_oled_print( lua_State *state ) {
 	size_t len;
 	int x            = luaL_checkinteger( state, -4 );
@@ -21,6 +24,7 @@ int vm_lua_oled_print( lua_State *state ) {
 	const char *text = luaL_checklstring( state, -2, &len );
 	int size         = luaL_checkinteger( state, -1 );
 
+	// Only 8, 16, 24, and 32-pixel tall fonts exist
 	if ( ( size < 1 ) || ( size > 4 ) ) {
 		return 0;
 	}
@@ -35,6 +39,9 @@ int vm_lua_oled_print( lua_State *state ) {
 	return 0;
 }
 
+// oled.fillrect( X0, Y0, X1, Y1 )
+//
+// Fill a rectangle in the framebuffer
 int vm_lua_oled_fillrect( lua_State *state ) {
 	int x0 = luaL_checkinteger( state, -4 );
 	int y0 = luaL_checkinteger( state, -3 );
@@ -44,28 +51,34 @@ int vm_lua_oled_fillrect( lua_State *state ) {
 	int p;
 	int mask;
 
+	// Swap parameters to keep y0 < y1
 	if ( y0 > y1 ) {
 		int t = y0;
 		y0 = y1;
 		y1 = t;
 	}
 
+	// If the minimum Y is too high, bail
 	if ( y0 > 63 ) {
 		return 0;
 	}
 
+	// If the maximum Y is too low, bail
 	if ( y1 < 0 ) {
 		return 0;
 	}
 
+	// Crop the minimum Y value if needed
 	if ( y0 < 0 ) {
 		y0 = 0;
 	}
 
+	// Crop the maximum Y value if needed
 	if ( y1 > 63 ) {
 		y1 = 63;
 	}
 
+	// And likewise for the X coordinates...
 	if ( x0 > x1 ) {
 		int t = x0;
 		x0 = x1;
@@ -88,7 +101,14 @@ int vm_lua_oled_fillrect( lua_State *state ) {
 		x1 = 127;
 	}
 
+	// First handle any 'partial stripe' at the minimum Y coordinate
 	p = ( y0 / 8 ) * 128;
+
+	// This builds the 'upper' bits to fill with
+	//
+	// This may only build a partial 'middle' stripe if Y0 and Y1 are
+	// close together, and in the process will push 'y0' to become
+	// greater than y1, preventing further stripe rendering.
 	mask = 0;
 	while ( ( y0 & 7 ) && ( y0 <= y1 ) ) {
 		mask |= 1 << ( y0 & 7 );
@@ -100,6 +120,7 @@ int vm_lua_oled_fillrect( lua_State *state ) {
 		}
 	}
 
+	// Now handle the 'lower' partial stripe with the maximum y.
 	p = ( y1 / 8 ) * 128;
 	mask = 0;
 	while ( ( ( y1 & 7 ) != 7 ) && ( y0 <= y1 ) ) {
@@ -112,6 +133,7 @@ int vm_lua_oled_fillrect( lua_State *state ) {
 		}
 	}
 
+	// And now the easy part, any 'full 8 pixel aligned' stripes
 	p = ( y0 / 8 ) * 128;
 	while ( y0 < y1 ) {
 		memset( oled_buffer + p + x0, 0xFF, ( x1 - x0 ) + 1 );
@@ -122,6 +144,11 @@ int vm_lua_oled_fillrect( lua_State *state ) {
 	return 0;
 }
 
+// oled.copyrect( X0, Y0, X1, Y1, XOffset, YOffset )
+//
+// Copies the rectangle from (X0,Y0)-(X1,Y1) offsetting it by (XOffset,YOffset) pixels
+//
+// Note that the Y coordinates ignore the lower 3 bits so they are 'stripe aligned'
 int vm_lua_oled_copyrect( lua_State *state ) {
 	int x0 = luaL_checkinteger( state, -6 );
 	int y0 = luaL_checkinteger( state, -5 ) & ~7;
@@ -191,6 +218,9 @@ int vm_lua_oled_copyrect( lua_State *state ) {
 	return 0;
 }
 
+// oled.eraserect( X0, Y0, X1, Y1 )
+//
+// Near-identical to oled.fillrect however it erases rectangles instead
 int vm_lua_oled_eraserect( lua_State *state ) {
 	int x0 = luaL_checkinteger( state, -4 );
 	int y0 = luaL_checkinteger( state, -3 );
@@ -288,6 +318,11 @@ const struct luaL_Reg oled_lib[] = {
 	{ 0 }
 };
 
+// A custom stripped-down version of the stock os.date function
+//
+// Avoids having to expose the entire os. library as several
+// functions are dangerous in case the monitoring app runs as
+// root.
 int vm_lua_os_date( lua_State *state ) {
 	const char *s = luaL_checkstring( state, -2 );
 	time_t t = luaL_checkinteger( state, -1 );
