@@ -3,19 +3,7 @@
 
 lua_State *vm = NULL;
 
-static const char *__default_script =
-	"oled.print( 24,  0, string.format( '%4.1fC', sensors.temperature ), 3 )"
-"\n"	"oled.print( 24, 24, string.format( '%7.3fF', ( sensors.temperature * 1.8 ) + 32 ), 2 )"
-"\n"	"oled.print( 26, 40, string.format( '%3i%% CPU', sensors.cpu ), 1 )"
-"\n"	"oled.print( 26, 48, string.format( '%3i%% used /', "
-	"( sensors.disk[ '/' ].total - sensors.disk[ '/' ].free ) "
-	"* 100 / sensors.disk[ '/' ].total ), 1 )"
-"\n"	"oled.print( 26, 56, os.date( '%d-%b %H:%M', sensors.time ), 1 )"
-"\n"	"oled.copyrect(  96, 0, 126, 63, -1, 0 )"
-"\n"	"oled.eraserect( 126, 0, 126, 63 )"
-"\n"	"oled.fillrect( 126, 64 - ( sensors.cpu * 0.60 ), 126, 63 )"
-"\n"	"oled.fillrect(   1, 84 - sensors.temperature, 23, 63 )"
-;
+#include "default_script.h"
 
 // oled.print( X, Y, TEXT, SIZE )
 //

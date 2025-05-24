@@ -22,7 +22,7 @@ leds: leds.c
 
 monitor: monitor.o
 
-monitor.o: monitor.c ssd1306.h fonts.h masks.h monitor_argp.h monitor_vm.h
+monitor.o: monitor.c ssd1306.h fonts.h masks.h monitor_argp.h monitor_vm.h default_script.h
 
 fonts.h: generate_fonts.py $(FONTS_SRC)
 	./generate_fonts.py
@@ -30,5 +30,8 @@ fonts.h: generate_fonts.py $(FONTS_SRC)
 masks.h: generate_masks.py default_mask.txt
 	./generate_masks.py default_mask.txt
 
+default_script.h: default_script.lua generate_default_script.awk
+	awk -f generate_default_script.awk default_script.lua > default_script.h
+
 clean:
-	$(RM) leds monitor fonts.h masks.h *.o
+	$(RM) leds monitor fonts.h masks.h default_script.h *.o

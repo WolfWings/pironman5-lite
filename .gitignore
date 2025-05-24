@@ -4,5 +4,6 @@
 # 'Generated' files
 fonts.h
 masks.h
+default_script.h
 leds
 monitor
