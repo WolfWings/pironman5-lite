@@ -107,33 +107,55 @@ void called_every_second( int ignored ) {
 
 	update_oled();
 
-	// Directly generate UTF-8 braille encoding of the OLED display
-	if ( arguments.verbosity >= 3 ) {
-		char bufferh[ ( 64 * 3 ) + 1 ] = { [ 64 * 3 ] = '\0' };
-		char bufferl[ ( 64 * 3 ) + 1 ] = { [ 64 * 3 ] = '\0' };
-		for ( int y = 0; y < 64; y += 8 ) {
-			int p = ( y / 8 ) * 128;
-			for ( int x = 0; x < 128; x += 2 ) {
-				int cx = ( x / 2 ) * 3;
-				unsigned char cu, cl;
-				unsigned char c0, c1;
-				c0 = oled_buffer[ p + x ];
-				c1 = oled_buffer[ p + x + 1];
-				cu = ( ( c0 & 0x07 ) >> 0 ) | ( ( c1 & 0x07 ) << 3 );
-				cl = ( ( c0 & 0x70 ) >> 4 ) | ( ( c1 & 0x70 ) >> 1 );
-				if ( c0 & 0x08 ) cu |= 0x40;
-				if ( c0 & 0x80 ) cl |= 0x40;
-				if ( c1 & 0x08 ) cu |= 0x80;
-				if ( c1 & 0x80 ) cl |= 0x80;
-				bufferh[ cx     ] = 0xE2;
-				bufferh[ cx + 1 ] = 0xA0 | ( cu >> 6 );
-				bufferh[ cx + 2 ] = 0x80 | ( cu & 0x3F );
-				bufferl[ cx     ] = 0xE2;
-				bufferl[ cx + 1 ] = 0xA0 | ( cl >> 6 );
-				bufferl[ cx + 2 ] = 0x80 | ( cl & 0x3F );
+	// Displays a sixel-based preview of the OLED display if requested
+	//
+	// We render it as a 132x72 image, with four blank rows and a two-
+	// sixel border around the OLED image so the boundaries are clear.
+	if ( arguments.terminal_preview > 0 ) {
+		char sixel[ 134 ];
+
+		// 9 = most compatible aspect ratio 1:1 sixel mode
+		printf( "\033P9q" );
+
+		// Top border drawn ┌─────────┐
+		sixel[ 0 ] = '?' + 16 + 32;
+		memset( sixel + 1, '?' + 16, 130 );
+		sixel[ 131 ] = '?' + 16 + 32;
+		sixel[ 132 ] = '-'; // sixel equivalent of \n
+		sixel[ 133 ] = 0;
+		printf( "%s", sixel );
+
+		// Buffer displayed │ content │
+		sixel[ 0 ] = '?' + 63;
+		sixel[ 1 ] = '?';
+		sixel[ 130 ] = '?';
+		sixel[ 131 ] = '?' + 63;
+		for ( int y = 0; y < 64; y += 6 ) {
+			memset( sixel + 2, '?', 128 );
+			for ( int yo = 0; yo < 6; yo++ ) {
+				// Because we output 6 pixels per stripe
+				// we'll have two leftover rows so we'll
+				// add the 'bottom border' directly.
+				if ( ( y + yo ) >= 64 ) {
+					for ( int x = 1; x <= 130; x++ ) {
+						sixel[ x ] += 32;
+					}
+					break;
+				}
+				int m = 1 << ( ( y + yo ) % 8 );
+				int b = 1 << yo;
+				int p = ( ( y + yo ) / 8 ) * 128;
+				for ( int x = 0; x < 128; x++ ) {
+					if ( oled_buffer[ p + x ] & m ) {
+						sixel[ x + 2 ] += b;
+					}
+				}
 			}
-			printf( "%s\n%s\n", bufferh, bufferl );
+			printf( "%s", sixel );
 		}
+
+		// Exit sixel mode
+		printf( "\033\\\n" );
 	}
 }
 
