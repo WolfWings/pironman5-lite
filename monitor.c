@@ -115,7 +115,7 @@ void called_every_second( int ignored ) {
 		char sixel[ 134 ];
 
 		// 9 = most compatible aspect ratio 1:1 sixel mode
-		printf( "\033P9q" );
+		printf( "\033P9;1;0q#1;1;0;100;0" );
 
 		// Top border drawn ┌─────────┐
 		sixel[ 0 ] = '?' + 16 + 32;
