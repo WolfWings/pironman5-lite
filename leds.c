@@ -155,7 +155,36 @@ static struct argp argp = {
 	.doc = "SPI-based LED control utility for WS2812 strings",
 };
 
-// Chosen to be an exact integer divisor of the default 125Mhz SPI clock
+// So the WS2812 addressible LEDs use a single-wire data interface
+// that relies on 'pulse width' to encode either 0's or 1's.
+//
+// They internally use a frequency of ~800khz nominally, as follows:
+//
+// "Zero"                 "One"
+//  ____                _________
+// |    |              |         |         |
+// |    |______________|         |_________|
+// !                   !                   !
+// ^------800 khz------^------800 khz------^
+//
+// Further bits are passed onwards once you fill a given LED, allowing
+// things to be daisy-chained near-infinitely.
+//
+// Finally a long (~0.25ms) low pulse causes all LEDs to 'latch/switch'
+// to the new value they've received, so making sure things stay 'low'
+// by default as much as possible makes things auto-recover in case of
+// issues or having to restart communications.
+//
+// We're (ab)using the SPI hardware to generate the above pulses using
+// the 'data' wire, four bits per LED bit, bits 8421 get sent 1248, so
+// 0x2 = ▁▒▁▁ and 0x6 = ▁▒▒▁ which is the above diagrams shifted a bit
+// so the signal always starts and ends low.
+//
+// This means we need a frequency of ~800khz * 4 = ~3.2Mhz, which I've
+// rounded to the nearest exact integer divisor of the built-in 125Mhz
+// SPI clock source on the RPi5 of 40, which is a LITTLE slow so might
+// have issues with extremely long LED strings, but for the short ones
+// usually found as case lights works flawlessly.
 static const uint32_t spi_speed = 3125000;
 
 static uint8_t *ledbuffer;
