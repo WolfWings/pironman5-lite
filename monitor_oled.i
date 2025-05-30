@@ -67,21 +67,18 @@ void oled_init( void ) {
 
 	config.handles.oled = open( arguments.oled.device, O_WRONLY );
 	if ( config.handles.oled < 0 ) {
-		perror( "opening I2C device for write access" );
-		exit( -1 );
+		err( EXIT_FAILURE, "opening I2C device %s for write access", arguments.oled.device );
 	}
 
 	if ( ioctl( config.handles.oled, I2C_SLAVE, arguments.oled.address ) < 0 ) {
-		perror( "ioctl to assign destination I2C address" );
-		exit( -1 );
+		err( EXIT_FAILURE, "ioctl to assign destination I2C address %i", arguments.oled.address );
 	}
 
 	// So we exit 'cleanly' and don't leave the oled on
 	atexit( display_off_atexit );
 
 	if ( write( config.handles.oled, oled_ssd1306_init, sizeof( oled_ssd1306_init ) ) != sizeof( oled_ssd1306_init ) ) {
-		perror( "initializing oled" );
-		exit( -1 );
+		err( EXIT_FAILURE, "initializing oled" );
 	}
 
 	// Update all-black once to avoid 'scroll in' on startup
@@ -93,7 +90,7 @@ void oled_init( void ) {
 
 	h = open( arguments.oled.mask, O_RDONLY );
 	if ( h == -1 ) {
-		perror( "opening custom OLED mask file, using default" );
+		warn( "opening custom OLED mask file %s, using default", arguments.oled.mask );
 		return;
 	}
 
@@ -112,7 +109,7 @@ void oled_init( void ) {
 			}
 
 			if ( bytes == -1 ) {
-				perror( "reading custom OLED mask file" );
+				warn( "reading custom OLED mask file" );
 				close( h );
 				return;
 			}

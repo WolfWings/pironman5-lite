@@ -55,8 +55,7 @@ void sensor_update_cpu_usage( void ) {
 void sensor_init_cpu_usage( void ) {
 	config.handles.cpu = open( "/proc/stat", O_RDONLY );
 	if ( config.handles.temp < 0 ) {
-		perror( "Opening /proc/stat to monitor CPU usage" );
-		exit( -1 );
+		err( EXIT_FAILURE, "Opening /proc/stat to monitor CPU usage" );
 	}
 
 	stat_idle[ 0 ] = 0;

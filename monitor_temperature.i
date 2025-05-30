@@ -20,7 +20,6 @@ unsigned int sensor_update_temperature( void ) {
 void sensor_init_temperature( void ) {
 	config.handles.temp = open( arguments.temperature.device, O_RDONLY );
 	if ( config.handles.temp < 0 ) {
-		perror( "opening device to monitor temperature" );
-		exit( -1 );
+		err( EXIT_FAILURE, "opening device %s to monitor temperature", arguments.temperature.device );
 	}
 }

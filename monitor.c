@@ -1,12 +1,15 @@
+#include <err.h>
 #include <argp.h>
-#include <time.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <signal.h>
+#include <sys/time.h>
 #include <sys/ioctl.h>
+#include <sys/timerfd.h>
 #include <sys/statvfs.h>
 #include <linux/i2c-dev.h>
 
@@ -15,18 +18,23 @@
 
 #include "monitor_argp.i"
 
+// Integer divisors of 1,000,000,000 are ideal
+#define UPDATE_FPS 64
+
 struct {
 	struct {
 		int oled;
 		int temp;
 		int cpu;
 		int disk;
+		int timerfd;
 	} handles;
 } config = {
 	.handles.oled = -1,
 	.handles.temp = -1,
 	.handles.cpu  = -1,
 	.handles.disk = -1,
+	.handles.timerfd = -1,
 };
 
 // ============================================================ OLED ROUTINES
@@ -115,6 +123,7 @@ void called_every_second( int ignored ) {
 		char sixel[ 134 ];
 
 		// 9 = most compatible aspect ratio 1:1 sixel mode
+		// We're running a single color so specify 'pure bright white'
 		printf( "\033P9;1;0q#1;1;0;100;0" );
 
 		// Top border drawn ┌─────────┐
@@ -166,11 +175,13 @@ void exit_cleanly( int ignored ) {
 }
 
 int main( int argc, char **argv ) {
-	struct itimerval every_second = {
-		.it_interval.tv_sec = 1,
-		.it_interval.tv_usec = 0,
-		.it_value.tv_sec = 1,
-		.it_value.tv_usec = 0,
+	uint64_t frames;
+	uint64_t overrun = 0;
+	struct itimerspec timer_interval = {
+		.it_interval.tv_sec = 0,
+		.it_interval.tv_nsec = 1000000000 / 64,
+		.it_value.tv_sec = 0,
+		.it_value.tv_nsec = 1,
 	};
 
 	signal( SIGTERM, exit_cleanly );
@@ -188,13 +199,36 @@ int main( int argc, char **argv ) {
 
 	vm_init();
 
-	signal( SIGALRM, called_every_second );
+	config.handles.timerfd = timerfd_create( CLOCK_BOOTTIME, 0 );
+	if ( config.handles.timerfd == -1 ) {
+		err( EXIT_FAILURE, "timerfd_create" );
+	}
 
-	// Update once every second
-	setitimer( ITIMER_REAL, &every_second, NULL );
+	if ( timerfd_settime( config.handles.timerfd, 0, &timer_interval, NULL ) != 0 ) {
+		err( EXIT_FAILURE, "timerfd_settime" );
+	}
+
+	frames = UPDATE_FPS - 1;
 
 	for (;;) {
-		pause();
+		errno = 0;
+		if ( read( config.handles.timerfd, &overrun, sizeof( overrun ) ) < sizeof( overrun ) ) {
+			if ( errno == EINTR ) {
+				continue;
+			}
+			err( EXIT_FAILURE, "read( timerfd )" );
+		}
+
+		if ( ( overrun > 1 )
+		  && ( arguments.verbosity >= 1 ) ) {
+			printf( "Frame drop of %li detected\n", overrun - 1 );
+		}
+
+		frames += overrun;
+		while ( frames > UPDATE_FPS ) {
+			frames -= UPDATE_FPS;
+			called_every_second( 0 );
+		}
 	}
 
 	__builtin_unreachable();

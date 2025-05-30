@@ -85,13 +85,13 @@ static error_t parse_opt( int key, char *arg, struct argp_state *state ) {
 		h = open( arg, O_RDONLY );
 
 		if ( h < 0 ) {
-			perror( "opening lua script for read access" );
+			warn( "opening lua script %s for read access", arg );
 			argp_usage( state );
 		}
 
 		bytes = lseek( h, 0, SEEK_END );
 		if ( bytes < 0 ) {
-			perror( "getting file size of lua script" );
+			warn( "getting file size of lua script %s", arg );
 			close( h );
 			return 0;
 		}
@@ -103,7 +103,7 @@ static error_t parse_opt( int key, char *arg, struct argp_state *state ) {
 		// malloc is safe here as we immediately load the full buffer
 		arguments.script = malloc( bytes + 1 );
 		if ( arguments.script == NULL ) {
-			perror( "allocating memory to load lua script" );
+			warn( "allocating memory to load lua script %s", arg );
 			argp_usage( state );
 		}
 
@@ -121,7 +121,7 @@ static error_t parse_opt( int key, char *arg, struct argp_state *state ) {
 			}
 
 			// Actual error
-			perror( "incomplete read of lua script" );
+			warn( "incomplete read of lua script %s", arg );
 			argp_usage( state );
 
 			__builtin_unreachable();
@@ -147,7 +147,7 @@ static error_t parse_opt( int key, char *arg, struct argp_state *state ) {
 		arguments.oled.address = strtoul( arg, NULL, 0 );
 
 		if ( errno != 0 ) {
-			perror( "parsing OLED I2C address" );
+			warn( "parsing OLED I2C address %s", arg );
 			argp_usage( state );
 		}
 

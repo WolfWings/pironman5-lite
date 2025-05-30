@@ -15,7 +15,7 @@ void sensor_update_disk_usage( void ) {
 	bytes = read( config.handles.disk, mounts + 1, sizeof( mounts ) - 1 );
 
 	if ( bytes < 0 ) {
-		perror( "reading /proc/mounts" );
+		warn( "reading /proc/mounts" );
 		return;
 	}
 
@@ -75,7 +75,6 @@ void sensor_update_disk_usage( void ) {
 void sensor_init_disk_usage( void ) {
 	config.handles.disk = open( "/proc/mounts", O_RDONLY );
 	if ( config.handles.disk < 0 ) {
-		perror( "opening /proc/mounts" );
-		exit( -1 );
+		err( EXIT_FAILURE, "opening /proc/mounts" );
 	}
 }
