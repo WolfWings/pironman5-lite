@@ -21,6 +21,10 @@
 // Integer divisors of 1,000,000,000 are ideal
 #define UPDATE_FPS 64
 
+#if ( ( 1000000000 % UPDATE_FPS ) > 0 )
+	#warning FPS not set to value that divides exactly into nanoseconds
+#endif
+
 struct {
 	struct {
 		int oled;
@@ -179,9 +183,9 @@ int main( int argc, char **argv ) {
 	uint64_t overrun = 0;
 	struct itimerspec timer_interval = {
 		.it_interval.tv_sec = 0,
-		.it_interval.tv_nsec = 1000000000 / 64,
+		.it_interval.tv_nsec = 1000000000 / UPDATE_FPS,
 		.it_value.tv_sec = 0,
-		.it_value.tv_nsec = 1,
+		.it_value.tv_nsec = 1000000000 / UPDATE_FPS,
 	};
 
 	signal( SIGTERM, exit_cleanly );
@@ -208,7 +212,7 @@ int main( int argc, char **argv ) {
 		err( EXIT_FAILURE, "timerfd_settime" );
 	}
 
-	frames = UPDATE_FPS - 1;
+	frames = UPDATE_FPS;
 
 	for (;;) {
 		errno = 0;
