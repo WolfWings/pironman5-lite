@@ -11,6 +11,7 @@
 #include <sys/ioctl.h>
 #include <sys/timerfd.h>
 #include <sys/statvfs.h>
+#include <sys/sysinfo.h>
 #include <linux/i2c-dev.h>
 
 #include "fonts.h"
@@ -33,12 +34,16 @@ struct {
 		int disk;
 		int timerfd;
 	} handles;
+	uint64_t overrun;
+	long int processors;
 } config = {
-	.handles.oled = -1,
-	.handles.temp = -1,
-	.handles.cpu  = -1,
-	.handles.disk = -1,
+	.handles.oled    = -1,
+	.handles.temp    = -1,
+	.handles.cpu     = -1,
+	.handles.disk    = -1,
 	.handles.timerfd = -1,
+	.overrun         = 0,
+	.processors      = 1,
 };
 
 // ============================================================ OLED ROUTINES
@@ -63,10 +68,10 @@ struct {
 
 // ========================================================== MAIN EVENT LOOP
 
-void called_every_second( int ignored ) {
+static void called_every_second( void ) {
 	struct timeval time_start, time_end;
 
-	unsigned int cpu_used;
+	float cpu_used;
 
 	lua_getglobal( vm, "sensors" );
 
@@ -75,9 +80,15 @@ void called_every_second( int ignored ) {
 
 	sensor_update_cpu_usage();
 
-	cpu_used = ( CPU_WINDOW * 400 ) - ( stat_idle[ 0 ] - stat_idle[ CPU_WINDOW ] );
+	cpu_used = ( ( config.processors * CPU_WINDOW * 100 ) + stat_idle[ CPU_WINDOW ] - stat_idle[ 0 ] );
+	cpu_used /= (float)( config.processors * CPU_WINDOW );
+	if ( cpu_used < 0.0) {
+		cpu_used = 0.0;
+	} else if ( cpu_used > 100.0 ) {
+		cpu_used = 100.0;
+	}
 
-	lua_pushnumber( vm, ( ( lua_Number ) cpu_used ) / ( 4.0 * CPU_WINDOW ) );
+	lua_pushnumber( vm, cpu_used );
 	lua_setfield( vm, -2, "cpu" );
 
 	lua_pushinteger( vm, time( NULL ) );
@@ -180,7 +191,6 @@ void exit_cleanly( int ignored ) {
 
 int main( int argc, char **argv ) {
 	uint64_t frames;
-	uint64_t overrun = 0;
 	struct itimerspec timer_interval = {
 		.it_interval.tv_sec = 0,
 		.it_interval.tv_nsec = 1000000000 / UPDATE_FPS,
@@ -216,22 +226,22 @@ int main( int argc, char **argv ) {
 
 	for (;;) {
 		errno = 0;
-		if ( read( config.handles.timerfd, &overrun, sizeof( overrun ) ) < sizeof( overrun ) ) {
+		if ( read( config.handles.timerfd, &config.overrun, sizeof( config.overrun ) ) < sizeof( config.overrun ) ) {
 			if ( errno == EINTR ) {
 				continue;
 			}
 			err( EXIT_FAILURE, "read( timerfd )" );
 		}
 
-		if ( ( overrun > 1 )
+		if ( ( config.overrun > 1 )
 		  && ( arguments.verbosity >= 1 ) ) {
-			printf( "Frame drop of %li detected\n", overrun - 1 );
+			printf( "Frame drop of %li detected\n", config.overrun - 1 );
 		}
 
-		frames += overrun;
+		frames += config.overrun;
 		while ( frames > UPDATE_FPS ) {
 			frames -= UPDATE_FPS;
-			called_every_second( 0 );
+			called_every_second();
 		}
 	}
 

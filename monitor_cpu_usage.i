@@ -58,9 +58,17 @@ void sensor_init_cpu_usage( void ) {
 		err( EXIT_FAILURE, "Opening /proc/stat to monitor CPU usage" );
 	}
 
+	errno = 0;
+	config.processors = sysconf( _SC_NPROCESSORS_CONF );
+	if ( config.processors < 0 ) {
+		err( EXIT_FAILURE, "Fetching number of processors from sysconf" );
+	}
+
 	stat_idle[ 0 ] = 0;
 	sensor_update_cpu_usage();
+	stat_idle[ 0 ] += ( 100 * config.processors ) / UPDATE_FPS;
+	stat_idle[ 0 ] -= ( 100 * config.processors ) - 1;
 	for ( int i = 1; i <= CPU_WINDOW; i++ ) {
-		stat_idle[ i ] = stat_idle[ i - 1 ] - 400;
+		stat_idle[ i ] = stat_idle[ i - 1 ] - ( 100 * config.processors );
 	}
 }
